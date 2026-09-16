@@ -12,13 +12,10 @@ from state.state import State
 from tools.write_generated_file import write_generated_file
 from utils.utils import load_fast_llm, load_powerful_llm
 
-# llm_with_tools = load_llm().bind_tools([write_generated_file])
 llm_fast = load_fast_llm()
-llm_power = load_powerful_llm()
+llm_power_with_tools = load_powerful_llm().bind_tools([write_generated_file])
 
 def research(state: State, config: RunnableConfig):
-    thread_id = config["configurable"]["thread_id"]
-    print(f"🧵 thread_id: {thread_id}")
     print("🔎 [RESEARCH] Iniciando...")
     run = config["configurable"]["run_research"]
 
@@ -33,17 +30,16 @@ def research(state: State, config: RunnableConfig):
 
     print("🤖 [RESEARCH] Executando LLM...")
 
-    # response = llm.invoke([
-    #     SystemMessage(content=RESEARCH_PROMPT),
-    #     HumanMessage(content=str(state["requirements"])),
-    # ])
+    response = llm_fast.invoke([
+        SystemMessage(content=RESEARCH_PROMPT),
+        HumanMessage(content=str(state["requirements"])),
+    ])
 
     return {
         "research": {
-            "result": "response.content"
+            "result": response.content
         }
     }
-
 
 def design(state: State, config: RunnableConfig):
     print("🎨 [DESIGN] Iniciando...")
@@ -61,19 +57,28 @@ def design(state: State, config: RunnableConfig):
 
     print("🤖 [DESIGN] Executando LLM...")
 
+    requirements = state["requirements"]
     research = state["research"]["result"]
 
-    # response = llm.invoke([
-    #     SystemMessage(content=DESIGN_PROMPT),
-    #     HumanMessage(content=str(research)),
-    # ])
+    response = llm_fast.invoke([
+        SystemMessage(content=DESIGN_PROMPT),
+            HumanMessage(
+            content=f"""
+            REQUIREMENTS:
+            {requirements}
+
+            RESEARCH:
+            {research}
+
+            """
+        ),
+    ])
 
     return {
         "design": {
-            "result": "response.content"
+            "result": response.content
         }
     }
-
 
 def content(state: State, config: RunnableConfig):
     print("✍️ [CONTENT] Iniciando...")
@@ -94,27 +99,26 @@ def content(state: State, config: RunnableConfig):
     research = state["research"]["result"]
     design = state["design"]["result"]
 
-    # response = llm.invoke([
-    #     SystemMessage(content=CONTENT_PROMPT),
-    #     HumanMessage(
-    #         content=f"""
-    #         RESEARCH:
-    #         {research}
+    response = llm_fast.invoke([
+        SystemMessage(content=CONTENT_PROMPT),
+        HumanMessage(
+            content=f"""
+            RESEARCH:
+            {research}
 
-    #         DESIGN:
-    #         {design}
-    #         """
-    #     ),
-    # ])
+            DESIGN:
+            {design}
+            """
+        ),
+    ])
 
     print("✅ [CONTENT] Finalizado")
 
     return {
         "content": {
-            "result": "response.content"
+            "result": response.content
         }
     }
-
 
 def code(state: State, config: RunnableConfig):
     print("💻 [CODE] Iniciando...")
@@ -130,92 +134,63 @@ def code(state: State, config: RunnableConfig):
             "code": state["code"]
         }
 
-    requirements = state["requirements"]
-    research = state["research"]["result"]
+    project = state["project"]
     design = state["design"]["result"]
     content = state["content"]["result"]
 
-    print("🤖 [CODE] Executando LLM...")
+    history = state.get("messages", [])
 
-    # response = llm.invoke([
-    #     SystemMessage(content=CODE_PROMPT),
-    #     HumanMessage(
-    #         content=f"""
-    #         REQUIREMENTS:
-    #         {requirements}
+    # Primeira execução do CODE
+    if not history:
+        print("🆕 [CODE] Iniciando conversa...")
 
-    #         RESEARCH:
-    #         {research}
+        user_message = HumanMessage(
+            content=f"""
+            PROJECT:
+            {project}
 
-    #         DESIGN:
-    #         {design}
+            DESIGN:
+            {design}
 
-    #         CONTENT:
-    #         {content}
-    #         """
-    #     ),
-    # ])
+            CONTENT:
+            {content}
+            """
+        )
 
-    return {
-        "code": {
-            "result": "response.content"
-        }
-    }
+        response = llm_power_with_tools.invoke([
+            SystemMessage(content=CODE_PROMPT),
+            user_message
+        ])
 
-def review(state: State, config: RunnableConfig):
-    print("🔍 [REVIEW] Iniciando...")
-    print("💻 [REVIEW] Iniciando...")
-    run = config["configurable"]["run_review"]
-
-    print(f"🔧 run_review: {run}")
-
-    if state.get("review") and not run:
-        print("♻️ [REVIEW] Usando estado salvo")
+        print("🤖 CONTENT:", repr(response.content))
+        print("🔧 TOOL CALLS:", response.tool_calls)
 
         return {
-            "review": state["review"]
+            "messages": [
+                user_message,
+                response
+            ],
+            "code": {
+                "result": response.content
+            }
         }
+
+    # Execuções seguintes após uma tool call
+    print("🔄 [CODE] Continuando conversa com histórico...")
     
-    # response = llm.invoke([
-    #     SystemMessage(content=REVIEW_PROMPT),
-    #     HumanMessage(
-    #         content=f"""
-    #         Requirements:
-    #         {state["requirements"]}
+    response = llm_power_with_tools.invoke([
+        SystemMessage(content=CODE_PROMPT),
+        *history
+    ])
 
-    #         Research:
-    #         {state["research"]["result"]}
-
-    #         Design:
-    #         {state["design"]["result"]}
-
-    #         Content:
-    #         {state["content"]["result"]}
-
-    #         Code:
-    #         {state["code"]["result"]}
-    #         """
-    #             ),
-    #         ])
+    print("🤖 CONTENT:", repr(response.content))
+    print("🔧 TOOL CALLS:", response.tool_calls)
 
     return {
-        "review": {
-            "result": "response.content"
+        "messages": [response],
+        "code": {
+            "result": response.content
         }
-    }
-
-def tool_node(state: State):
-    call = state["messages"][-1].tool_calls[0]
-
-    result = write_generated_file.invoke(call["args"])
-
-    return {
-        "messages": [
-            ToolMessage(
-                content=str(result),
-                tool_call_id=call["id"],
-            )
-        ]
     }
 
 def should_continue(state: State):
@@ -228,6 +203,28 @@ def should_continue(state: State):
         return "tools"
 
     return END
+
+
+def tool_node(state: State):
+    message = state["messages"][-1]
+
+    tool_messages = []
+
+    for call in message.tool_calls:
+        result = write_generated_file.invoke(call["args"])
+
+        tool_messages.append(
+            ToolMessage(
+                content=str(result),
+                tool_call_id=call["id"],
+            )
+        )
+
+    return {
+        "messages": tool_messages
+    }
+
+
 
 def build_graph(checkpointer) -> CompiledStateGraph[State, None, State, State]:
     builder = StateGraph(State)
