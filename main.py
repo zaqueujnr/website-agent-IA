@@ -22,6 +22,21 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
         }
     }
 
+    # Recupera o estado salvo
+    state = graph.get_state(config)
+
+    # Limpa somente as mensagens antigas
+    if state.values.get("messages"):
+        graph.update_state(
+            config,
+            {
+                "messages": [
+                    RemoveMessage(id=message.id)
+                    for message in state.values["messages"]
+                ]
+            }
+        )
+
     result = graph.invoke(
         {
         "requirements": {
@@ -37,8 +52,3 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
     }
     )
 
-    print("\n================ STATE ================\n")
-    print(state.values)
-
-    print("\n================ RESULTADO FINAL ================\n")
-    print(result)
