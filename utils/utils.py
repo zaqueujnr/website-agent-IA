@@ -17,5 +17,4 @@ def load_powerful_llm():
         model_provider="openai",
         api_key=os.getenv("NEXOS_API_KEY"),
         base_url="https://api.nexos.ai/v1",
-        temperature=0,
     )
