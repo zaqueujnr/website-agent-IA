@@ -19,8 +19,8 @@ class State(TypedDict):
     current_agent: str
     current_step: str
 
-    force_research: bool
-    force_design: bool
-    force_content: bool
-    force_code: bool
-    force_review: bool
+    source_files: dict
+    source_structure: dict
+
+    current_agent: str
+    current_step: str
