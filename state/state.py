@@ -21,6 +21,3 @@ class State(TypedDict):
 
     source_files: dict
     source_structure: dict
-
-    current_agent: str
-    current_step: str
