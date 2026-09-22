@@ -1,54 +1,67 @@
-from graph.graph import build_graph
-import uuid
 import os
 from langgraph.checkpoint.postgres import PostgresSaver
 
-thread_id = "a67c79ee-a1c9-4caf-9ef5-42d92f32215c"
-DB_URI = os.getenv("DATABASE_URL")
+from workflows.registry import build_workflow
+from utils.utils import clear_messages
 
-with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
-    checkpointer.setup()
 
-    graph = build_graph(checkpointer)
-
-    config = {
-        "configurable": {
-            "thread_id": thread_id,
-            "run_research": False,
-            "run_design": False,
-            "run_content": False,
-            "run_code": False,
-            "run_review": False,
-        }
-    }
-
-    # Recupera o estado salvo
-    state = graph.get_state(config)
-
-    # Limpa somente as mensagens antigas
-    if state.values.get("messages"):
-        graph.update_state(
-            config,
-            {
-                "messages": [
-                    RemoveMessage(id=message.id)
-                    for message in state.values["messages"]
-                ]
-            }
-        )
-
-    result = graph.invoke(
-        {
-        "requirements": {
-             "Crie um site profissional para uma empresa de telhas."
-        }
-    }, config=config)
-
-    state = graph.get_state(
-    {
-        "configurable": {
-            "thread_id": "a67c79ee-a1c9-4caf-9ef5-42d92f32215c"
-        }
-    }
+def main():
+    workflow_name = os.getenv(
+        "WORKFLOW",
+        "create",
     )
 
+    db_uri = os.getenv("DATABASE_URL")
+
+    config_improve = {
+        "configurable": {
+            "thread_id": "jebitte-maquinas",
+
+            "run_research": False,
+            "run_audit": False,
+            "run_design": True,
+            "run_content": False,
+            "run_code": True,
+            "run_review": True,
+        }
+    }
+
+    with PostgresSaver.from_conn_string(
+        db_uri
+    ) as checkpointer:
+
+        checkpointer.setup()
+
+        graph = build_workflow(
+            workflow_name=workflow_name,
+            checkpointer=checkpointer,
+        )
+
+        clear_messages(graph, config_improve)
+
+        result = graph.invoke(
+            {
+                "project": {
+                    "name": "Jebitte máquinas",
+                    "source_path": "/app/data/source",
+                },
+                "requirements": {
+                    "description": """
+                    Melhorar o design e a experiência do usuário
+                    do site existente da Jebitte Máquinas.
+
+                    Modernizar a interface, aprimorar a responsividade
+                    e adicionar animações profissionais.
+
+                    Preservar as funcionalidades e informações existentes.
+                    """
+                }
+            },
+            config=config_improve,
+        )
+
+        print(result)
+
+
+if __name__ == "__main__":
+    main()
