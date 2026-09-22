@@ -1,5 +1,6 @@
 import os
 from langchain.chat_models import init_chat_model
+from langchain_core.messages import RemoveMessage
 
 
 def load_fast_llm():
@@ -17,4 +18,23 @@ def load_powerful_llm():
         model_provider="openai",
         api_key=os.getenv("NEXOS_API_KEY"),
         base_url="https://api.nexos.ai/v1",
+    )
+
+
+def clear_messages(graph, config):
+    state = graph.get_state(config)
+
+    messages = state.values.get("messages", [])
+
+    if not messages:
+        return
+
+    graph.update_state(
+        config,
+        {
+            "messages": [
+                RemoveMessage(id=message.id)
+                for message in messages
+            ]
+        },
     )
